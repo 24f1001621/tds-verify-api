@@ -2,17 +2,13 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 import jwt
-from jwt import (
-    ExpiredSignatureError,
-    InvalidAudienceError,
-    InvalidIssuerError,
-    InvalidTokenError,
-)
+from jwt import InvalidTokenError
+from cryptography.hazmat.primitives import serialization
 
 ISSUER = "https://idp.exam.local"
 AUDIENCE = "tds-606306b3.apps.exam.local"
 
-PUBLIC_KEY = """-----BEGIN PUBLIC KEY-----
+PUBLIC_KEY_PEM = b"""-----BEGIN PUBLIC KEY-----
 MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA2okOHspNjgA+2rTLbeuY
 cxiP/hG8C6Sb9iwg3yiLAA4HCnpITcbWCSelbvbYGuc3EbNy4xFyf5Cbj5DHJMID
 EkryOgyd2giIIIBOUBj8S63uGcnRpOBh9NFatfNwheKuzsPuVNldu6A9cNteNpXc
@@ -22,12 +18,12 @@ SI6iyrYbKR0NEBSqq4XkadEjsCs4F1RncsS4LlgniT7GlkL9Mce3b0wGLs9/7ZIX
 dQIDAQAB
 -----END PUBLIC KEY-----"""
 
-app = FastAPI()
+PUBLIC_KEY = serialization.load_pem_public_key(PUBLIC_KEY_PEM)
 
+app = FastAPI()
 
 class TokenRequest(BaseModel):
     token: str
-
 
 @app.post("/verify")
 async def verify(req: TokenRequest):
@@ -36,8 +32,8 @@ async def verify(req: TokenRequest):
             req.token,
             PUBLIC_KEY,
             algorithms=["RS256"],
-            audience=AUDIENCE,
             issuer=ISSUER,
+            audience=AUDIENCE,
         )
 
         return {
@@ -47,11 +43,8 @@ async def verify(req: TokenRequest):
             "aud": payload.get("aud"),
         }
 
-    except (
-        ExpiredSignatureError,
-        InvalidAudienceError,
-        InvalidIssuerError,
-        InvalidTokenError,
-        Exception,
-    ):
+    except InvalidTokenError:
+        return JSONResponse(status_code=401, content={"valid": False})
+
+    except Exception:
         return JSONResponse(status_code=401, content={"valid": False})
